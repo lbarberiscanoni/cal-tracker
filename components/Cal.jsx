@@ -85,19 +85,6 @@ const Cal = () => {
               <Bar data={data} options={options} />
             </div>
           </section>
-          <section>
-            <h2 className="text-2xl font-bold mb-6">Calendar Details</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {calendarData.map((calendar) => (
-                <div key={calendar.name} className="bg-white p-6 rounded-lg shadow-lg">
-                  <h3 className="font-medium text-lg mb-2">{calendar.name}</h3>
-                  <p className="text-3xl font-bold text-indigo-600">
-                    {calendar.hours} hours
-                  </p>
-                </div>
-              ))}
-            </div>
-          </section>
         </div>
       )}
     </div>
