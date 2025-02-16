@@ -4,9 +4,11 @@ import Cal from '../components/Cal';
 
 const Home = () => {
   return (
-    <div>
-      <Cal />
-    </div>
+    <main className="w-full min-h-screen bg-background">
+      <div className="container mx-auto px-4">
+        <Cal />
+      </div>
+    </main>
   );
 };
 

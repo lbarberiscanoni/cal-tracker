@@ -137,15 +137,23 @@ export default async function handler(req, res) {
     for (let i = 0; i < responses.length; i++) {
       const href = responses[i].getElementsByTagName('href')[0]?.textContent;
       const displayName = responses[i].getElementsByTagName('displayname')[0]?.textContent;
-      if (href && displayName && href !== '/8310088992/calendars/') {
+      // Skip if it's not a valid calendar or if it's Reminders
+        if (!href || !displayName || 
+            href === '/8310088992/calendars/' || 
+            displayName.includes('Reminders') ||
+            href.includes('notification') || 
+            href.includes('inbox') || 
+            href.includes('outbox')) {
+                continue;
+        }
+
         calendarPromises.push(
-          getCalendarEvents(href, authHeader, startUTC, endUTC).then((eventsXml) => ({
-            id: href,
-            name: displayName,
-            hours: calculateEventHours(eventsXml)
-          }))
+            getCalendarEvents(href, authHeader, startUTC, endUTC).then((eventsXml) => ({
+                id: href,
+                name: displayName,
+                hours: calculateEventHours(eventsXml)
+            }))
         );
-      }
     }
 
     const calendars = await Promise.all(calendarPromises);
