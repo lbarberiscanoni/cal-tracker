@@ -1,6 +1,6 @@
 // pages/index.jsx
 import React from 'react';
-import Cal from '../../components/Cal';
+import Cal from '../components/Cal';
 
 const Home = () => {
   return (
