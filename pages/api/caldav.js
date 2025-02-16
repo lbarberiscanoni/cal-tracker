@@ -1,3 +1,4 @@
+// pages/api/caldav.js
 import { DOMParser } from '@xmldom/xmldom';
 import fetch from 'node-fetch';
 import ical from 'node-ical';
@@ -76,7 +77,6 @@ function calculateEventHours(eventsXml) {
   return Math.round(totalHours * 10) / 10;
 }
 
-// Helper to build a iCalendar UTC string
 function toICalUTCString(date) {
   const yyyy = date.getUTCFullYear();
   const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
@@ -88,7 +88,14 @@ function toICalUTCString(date) {
 }
 
 export default async function handler(req, res) {
-  const { appleId, appPassword } = req.body || {};
+  // Try to extract credentials from the request body first.
+  let { appleId, appPassword } = req.body || {};
+
+  // If not provided, use environment variables.
+  if (!appleId || !appPassword) {
+    appleId = process.env.CALDAV_APPLE_ID;
+    appPassword = process.env.CALDAV_APP_PASSWORD;
+  }
 
   if (!appleId || !appPassword) {
     return res.status(400).json({ error: 'Missing appleId or appPassword.' });
@@ -96,7 +103,6 @@ export default async function handler(req, res) {
 
   const authHeader = 'Basic ' + Buffer.from(`${appleId}:${appPassword}`).toString('base64');
 
-  // Example: limit events to the last 7 days
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const startUTC = toICalUTCString(sevenDaysAgo);
@@ -123,17 +129,14 @@ export default async function handler(req, res) {
        </d:propfind>`
     );
 
-    // 2) Parse out the calendars
     const parser = new DOMParser();
     const doc = parser.parseFromString(calendarsXml, 'text/xml');
     const responses = doc.getElementsByTagName('response');
 
-    // 3) For each calendar, fetch events in the last 7 days
     const calendarPromises = [];
     for (let i = 0; i < responses.length; i++) {
       const href = responses[i].getElementsByTagName('href')[0]?.textContent;
       const displayName = responses[i].getElementsByTagName('displayname')[0]?.textContent;
-      // Skip the base container
       if (href && displayName && href !== '/8310088992/calendars/') {
         calendarPromises.push(
           getCalendarEvents(href, authHeader, startUTC, endUTC).then((eventsXml) => ({

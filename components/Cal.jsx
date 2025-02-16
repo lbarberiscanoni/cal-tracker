@@ -1,5 +1,5 @@
 // components/Cal.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -15,44 +15,30 @@ import {
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 const Cal = () => {
-  const [credentials, setCredentials] = useState({
-    appleId: '',
-    appPassword: ''
-  });
   const [status, setStatus] = useState('idle');
   const [calendarData, setCalendarData] = useState([]);
   const [error, setError] = useState(null);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setStatus('loading');
-    setError(null);
-
-    try {
-      const response = await fetch('/api/caldav', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(credentials)
-      });
-
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch calendar data');
+  useEffect(() => {
+    const fetchData = async () => {
+      setStatus('loading');
+      try {
+        const response = await fetch('/api/caldav');
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to fetch calendar data');
+        }
+        setCalendarData(data);
+        setStatus('success');
+      } catch (err) {
+        setError(err.message);
+        setStatus('error');
       }
+    };
 
-      setCalendarData(data);
-      setStatus('success');
-    } catch (error) {
-      console.error('Error:', error);
-      setError(error.message);
-      setStatus('error');
-    }
-  };
+    fetchData();
+  }, []);
 
-  // Prepare data for the Bar chart
   const data = {
     labels: calendarData.map((item) => item.name),
     datasets: [
@@ -85,49 +71,12 @@ const Cal = () => {
   return (
     <div className="p-4 max-w-6xl mx-auto">
       <h1 className="text-3xl font-bold mb-8">Calendar Time Analytics</h1>
-      
-      <form onSubmit={handleSubmit} className="mb-8 max-w-md">
-        <div className="mb-4">
-          <label className="block mb-2 font-medium">Apple ID</label>
-          <input
-            type="email"
-            value={credentials.appleId}
-            onChange={(e) =>
-              setCredentials((prev) => ({ ...prev, appleId: e.target.value }))
-            }
-            className="w-full border rounded-lg px-4 py-2"
-            required
-          />
-        </div>
-        
-        <div className="mb-6">
-          <label className="block mb-2 font-medium">App-Specific Password</label>
-          <input
-            type="password"
-            value={credentials.appPassword}
-            onChange={(e) =>
-              setCredentials((prev) => ({ ...prev, appPassword: e.target.value }))
-            }
-            className="w-full border rounded-lg px-4 py-2"
-            required
-          />
-        </div>
-
-        <button 
-          type="submit" 
-          disabled={status === 'loading'}
-          className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400"
-        >
-          {status === 'loading' ? 'Analyzing...' : 'Analyze Calendar Time'}
-        </button>
-      </form>
-
+      {status === 'loading' && <p>Loading data...</p>}
       {error && (
         <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
           {error}
         </div>
       )}
-
       {status === 'success' && calendarData.length > 0 && (
         <div className="space-y-8">
           <section>
@@ -136,7 +85,6 @@ const Cal = () => {
               <Bar data={data} options={options} />
             </div>
           </section>
-
           <section>
             <h2 className="text-2xl font-bold mb-6">Calendar Details</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
