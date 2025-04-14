@@ -1,4 +1,4 @@
-// pages/api/caldav.js
+// pages/api/caldav/monthly.js
 import { DOMParser } from '@xmldom/xmldom';
 import fetch from 'node-fetch';
 import ical from 'node-ical';
@@ -36,6 +36,30 @@ async function makeCalDAVRequest(url, method, headers, body) {
   return responseText;
 }
 
+// Get week number from date
+function getWeekNumber(date) {
+  const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
+  const pastDaysOfYear = (date - firstDayOfYear) / 86400000;
+  return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+}
+
+// Get week start date (Sunday as first day of week)
+function getWeekStartDate(date) {
+  const result = new Date(date);
+  result.setDate(date.getDate() - date.getDay());
+  return result;
+}
+
+function toICalUTCString(date) {
+  const yyyy = date.getUTCFullYear();
+  const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(date.getUTCDate()).padStart(2, '0');
+  const hh = String(date.getUTCHours()).padStart(2, '0');
+  const min = String(date.getUTCMinutes()).padStart(2, '0');
+  const ss = String(date.getUTCSeconds()).padStart(2, '0');
+  return `${yyyy}${mm}${dd}T${hh}${min}${ss}Z`;
+}
+
 async function getCalendarEvents(calendarUrl, authHeader, startUTC, endUTC) {
   console.log('Fetching events for calendar:', calendarUrl);
 
@@ -69,14 +93,14 @@ async function getCalendarEvents(calendarUrl, authHeader, startUTC, endUTC) {
   return eventsXml;
 }
 
-function calculateEventHours(eventsXml) {
-  if (!eventsXml) return 0;
+function processCalendarEvents(eventsXml, calendarName) {
+  if (!eventsXml) return [];
 
   const parser = new DOMParser();
   const doc = parser.parseFromString(eventsXml, 'text/xml');
   const calendarDatas = doc.getElementsByTagName('calendar-data');
-
-  let totalHours = 0;
+  
+  const events = [];
 
   for (let i = 0; i < calendarDatas.length; i++) {
     const icalData = calendarDatas[i].textContent || '';
@@ -88,9 +112,19 @@ function calculateEventHours(eventsXml) {
         if (item.type === 'VEVENT') {
           const startTime = item.start;
           const endTime = item.end;
+          
           if (startTime && endTime) {
+            // Calculate duration in hours
             const durationHours = (endTime - startTime) / (1000 * 60 * 60);
-            totalHours += durationHours;
+            
+            events.push({
+              title: item.summary,
+              start: startTime,
+              end: endTime,
+              calendarName: calendarName,
+              category: calendarCategories[calendarName] || "Other",
+              durationHours: Math.round(durationHours * 10) / 10
+            });
           }
         }
       }
@@ -98,23 +132,18 @@ function calculateEventHours(eventsXml) {
       console.error('Failed to parse iCal data:', err);
     }
   }
-  return Math.round(totalHours * 10) / 10;
-}
-
-function toICalUTCString(date) {
-  const yyyy = date.getUTCFullYear();
-  const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const dd = String(date.getUTCDate()).padStart(2, '0');
-  const hh = String(date.getUTCHours()).padStart(2, '0');
-  const min = String(date.getUTCMinutes()).padStart(2, '0');
-  const ss = String(date.getUTCSeconds()).padStart(2, '0');
-  return `${yyyy}${mm}${dd}T${hh}${min}${ss}Z`;
+  
+  return events;
 }
 
 export default async function handler(req, res) {
-  // Handle range parameter
-  const { range = 'week' } = req.query;
+  // Get the requested month (format: YYYY-MM)
+  const { month } = req.query;
   
+  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+    return res.status(400).json({ error: 'Invalid month format. Use YYYY-MM.' });
+  }
+
   // Try to extract credentials from the request body first.
   let { appleId, appPassword } = req.body || {};
 
@@ -130,28 +159,13 @@ export default async function handler(req, res) {
 
   const authHeader = 'Basic ' + Buffer.from(`${appleId}:${appPassword}`).toString('base64');
 
-  // Set date range based on the range parameter
-  const now = new Date();
-  let startDate;
-  
-  switch (range) {
-    case 'week':
-      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      break;
-    case 'month':
-      startDate = new Date(now);
-      startDate.setMonth(startDate.getMonth() - 1);
-      break;
-    case 'year':
-      startDate = new Date(now);
-      startDate.setFullYear(startDate.getFullYear() - 1);
-      break;
-    default:
-      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  }
+  // Calculate start and end dates for the month
+  const startDate = new Date(`${month}-01T00:00:00Z`);
+  const endDate = new Date(startDate);
+  endDate.setMonth(endDate.getMonth() + 1);
   
   const startUTC = toICalUTCString(startDate);
-  const endUTC = toICalUTCString(now);
+  const endUTC = toICalUTCString(endDate);
 
   try {
     // 1) Get the list of calendars
@@ -178,12 +192,12 @@ export default async function handler(req, res) {
     const doc = parser.parseFromString(calendarsXml, 'text/xml');
     const responses = doc.getElementsByTagName('response');
 
+    // Fetch all calendar events
     const calendarPromises = [];
-    const categoryData = {};
-
     for (let i = 0; i < responses.length; i++) {
       const href = responses[i].getElementsByTagName('href')[0]?.textContent;
       const displayName = responses[i].getElementsByTagName('displayname')[0]?.textContent;
+      
       // Skip if it's not a valid calendar or if it's Reminders
       if (!href || !displayName || 
           href === '/8310088992/calendars/' || 
@@ -191,41 +205,63 @@ export default async function handler(req, res) {
           href.includes('notification') || 
           href.includes('inbox') || 
           href.includes('outbox')) {
-          continue;
+        continue;
       }
 
-      // Get the category for this calendar
-      const category = calendarCategories[displayName] || displayName;
-      
       calendarPromises.push(
-        getCalendarEvents(href, authHeader, startUTC, endUTC).then((eventsXml) => {
-          const hours = calculateEventHours(eventsXml);
-          return {
-            id: href,
-            name: category,
-            hours: hours,
-            color: categoryColors[category] || "#6B7280" // Default gray if no color defined
-          };
-        })
+        getCalendarEvents(href, authHeader, startUTC, endUTC)
+          .then((eventsXml) => processCalendarEvents(eventsXml, displayName))
       );
     }
 
-    let results = await Promise.all(calendarPromises);
+    // Wait for all calendar data to be fetched
+    const allCalendarEvents = await Promise.all(calendarPromises);
+    const allEvents = allCalendarEvents.flat();
+
+    // Now organize events by week
+    const weekMap = new Map();
     
-    // Combine results for calendars that map to the same category (like Routine)
-    const categoryMap = {};
-    results.forEach(cal => {
-      if (!categoryMap[cal.name]) {
-        categoryMap[cal.name] = cal;
-      } else {
-        categoryMap[cal.name].hours += cal.hours;
+    allEvents.forEach(event => {
+      const weekNum = getWeekNumber(event.start);
+      const weekStart = getWeekStartDate(event.start);
+      
+      // Create week key for the map
+      const weekKey = `${weekStart.getFullYear()}-${weekNum}`;
+      
+      if (!weekMap.has(weekKey)) {
+        weekMap.set(weekKey, {
+          weekNumber: weekNum,
+          startDate: weekStart,
+          categories: {}
+        });
       }
+      
+      const week = weekMap.get(weekKey);
+      if (!week.categories[event.category]) {
+        week.categories[event.category] = 0;
+      }
+      
+      week.categories[event.category] += event.durationHours;
+    });
+
+    // Convert map to array and sort by week number
+    const weeks = Array.from(weekMap.values())
+      .sort((a, b) => a.startDate - b.startDate)
+      .map(week => {
+        // Round all hours to one decimal place
+        for (const category in week.categories) {
+          week.categories[category] = Math.round(week.categories[category] * 10) / 10;
+        }
+        return week;
+      });
+
+    // Return the structured monthly data
+    return res.status(200).json({
+      month: month,
+      weeks: weeks,
+      categories: categoryColors
     });
     
-    // Convert back to array
-    results = Object.values(categoryMap);
-    
-    return res.status(200).json(results);
   } catch (error) {
     console.error('Request failed:', error);
     return res.status(500).json({ error: error.message });

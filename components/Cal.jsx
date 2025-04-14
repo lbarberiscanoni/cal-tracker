@@ -1,32 +1,41 @@
 // components/Cal.jsx
 import React, { useState, useEffect } from 'react';
-import { Bar, Doughnut } from 'react-chartjs-2';
+import { Bar, Doughnut, Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
   BarElement,
+  PointElement,
+  LineElement,
   Title,
   Tooltip,
   Legend,
   ArcElement,
 } from 'chart.js';
+import ChartDataLabels from 'chartjs-plugin-datalabels';
 
 ChartJS.register(
   CategoryScale,
   LinearScale,
   BarElement,
+  PointElement,
+  LineElement,
   Title,
   Tooltip,
   Legend,
-  ArcElement
+  ArcElement,
+  ChartDataLabels
 );
 
 const Cal = () => {
   const [status, setStatus] = useState('idle');
   const [calendarData, setCalendarData] = useState([]);
+  const [monthlyTrendData, setMonthlyTrendData] = useState(null);
   const [error, setError] = useState(null);
   const [dateRange, setDateRange] = useState('week');
+  const [viewMode, setViewMode] = useState('summary'); // 'summary' or 'trend'
+  const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().slice(0, 7)); // Format: YYYY-MM
 
   useEffect(() => {
     const fetchData = async () => {
@@ -48,6 +57,43 @@ const Cal = () => {
     fetchData();
   }, [dateRange]);
 
+  useEffect(() => {
+    // Only fetch monthly trend data if in trend view mode
+    if (viewMode === 'trend') {
+      const fetchMonthlyTrend = async () => {
+        setStatus('loading');
+        try {
+          const response = await fetch(`/api/caldav/monthly?month=${currentMonth}`);
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.error || 'Failed to fetch monthly trend data');
+          }
+          setMonthlyTrendData(data);
+          setStatus('success');
+        } catch (err) {
+          setError(err.message);
+          setStatus('error');
+        }
+      };
+
+      fetchMonthlyTrend();
+    }
+  }, [viewMode, currentMonth]);
+
+  // Navigate between months
+  const changeMonth = (offset) => {
+    const date = new Date(currentMonth + '-01');
+    date.setMonth(date.getMonth() + offset);
+    setCurrentMonth(date.toISOString().slice(0, 7));
+  };
+
+  // Format month for display
+  const formatMonth = (monthStr) => {
+    const date = new Date(monthStr + '-01');
+    return date.toLocaleString('default', { month: 'long', year: 'numeric' });
+  };
+
+  // Prepare summary chart data
   const barData = {
     labels: calendarData.map((item) => item.name),
     datasets: [
@@ -59,7 +105,7 @@ const Cal = () => {
     ],
   };
 
-  // First, let's sort the calendar data by hours (highest first) before passing it to the chart
+  // Sort the data for pie chart
   const sortedData = [...calendarData].sort((a, b) => b.hours - a.hours);
 
   const pieData = {
@@ -76,6 +122,30 @@ const Cal = () => {
     ],
   };
 
+  // Prepare monthly trend chart data
+  const prepareTrendData = () => {
+    if (!monthlyTrendData || !monthlyTrendData.weeks || !monthlyTrendData.categories) {
+      return null;
+    }
+
+    const labels = monthlyTrendData.weeks.map(week => `Week ${week.weekNumber}`);
+    
+    const datasets = Object.entries(monthlyTrendData.categories).map(([category, color]) => {
+      return {
+        label: category,
+        data: monthlyTrendData.weeks.map(week => week.categories[category] || 0),
+        borderColor: color,
+        backgroundColor: color + '33', // Add transparency
+        tension: 0.3,
+      };
+    });
+
+    return { labels, datasets };
+  };
+
+  const trendData = prepareTrendData();
+
+  // Chart options
   const pieOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -118,6 +188,9 @@ const Cal = () => {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
+      datalabels: {
+        display: false // Disable datalabels for bar chart
+      },
       legend: { display: false },
       title: {
         display: true,
@@ -140,41 +213,118 @@ const Cal = () => {
     },
   };
 
+  const trendOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      datalabels: {
+        display: false // Disable datalabels for line chart
+      },
+      legend: {
+        position: 'bottom',
+      },
+      title: {
+        display: true,
+        text: `Weekly Hours by Category - ${formatMonth(currentMonth)}`,
+        font: { size: 16 }
+      },
+      tooltip: {
+        callbacks: {
+          label: function(context) {
+            return `${context.dataset.label}: ${context.raw.toFixed(1)} hours`;
+          }
+        }
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        title: {
+          display: true,
+          text: 'Hours'
+        }
+      }
+    }
+  };
+
   return (
     <div className="w-full p-4">
-      <h1 className="text-2xl font-bold mb-4">Calendar Time Analytics</h1>
-      
-      <div className="flex gap-2 mb-6">
-        <button
-          onClick={() => setDateRange('week')}
-          className={`px-3 py-1 text-sm rounded ${
-            dateRange === 'week'
-              ? 'bg-indigo-600 text-white'
-              : 'bg-gray-200 hover:bg-gray-300'
-          }`}
-        >
-          Week
-        </button>
-        <button
-          onClick={() => setDateRange('month')}
-          className={`px-3 py-1 text-sm rounded ${
-            dateRange === 'month'
-              ? 'bg-indigo-600 text-white'
-              : 'bg-gray-200 hover:bg-gray-300'
-          }`}
-        >
-          Month
-        </button>
-        <button
-          onClick={() => setDateRange('year')}
-          className={`px-3 py-1 text-sm rounded ${
-            dateRange === 'year'
-              ? 'bg-indigo-600 text-white'
-              : 'bg-gray-200 hover:bg-gray-300'
-          }`}
-        >
-          Year
-        </button>
+      <div className="flex justify-between items-center mb-6">
+        <div className="flex gap-4">
+          <button
+            onClick={() => setViewMode('summary')}
+            className={`px-3 py-1 text-sm font-medium rounded-md ${
+              viewMode === 'summary'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-gray-200 hover:bg-gray-300 text-gray-800'
+            }`}
+          >
+            Summary View
+          </button>
+          <button
+            onClick={() => setViewMode('trend')}
+            className={`px-3 py-1 text-sm font-medium rounded-md ${
+              viewMode === 'trend'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-gray-200 hover:bg-gray-300 text-gray-800'
+            }`}
+          >
+            Monthly Trends
+          </button>
+        </div>
+        
+        {viewMode === 'summary' ? (
+          <div className="flex gap-2">
+            <button
+              onClick={() => setDateRange('week')}
+              className={`px-3 py-1 text-sm rounded ${
+                dateRange === 'week'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-gray-200 hover:bg-gray-300'
+              }`}
+            >
+              Week
+            </button>
+            <button
+              onClick={() => setDateRange('month')}
+              className={`px-3 py-1 text-sm rounded ${
+                dateRange === 'month'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-gray-200 hover:bg-gray-300'
+              }`}
+            >
+              Month
+            </button>
+            <button
+              onClick={() => setDateRange('year')}
+              className={`px-3 py-1 text-sm rounded ${
+                dateRange === 'year'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-gray-200 hover:bg-gray-300'
+              }`}
+            >
+              Year
+            </button>
+          </div>
+        ) : (
+          <div className="flex gap-2 items-center">
+            <button 
+              onClick={() => changeMonth(-1)}
+              className="px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300"
+            >
+              Previous
+            </button>
+            <div className="px-4 py-1 font-medium">
+              {formatMonth(currentMonth)}
+            </div>
+            <button 
+              onClick={() => changeMonth(1)}
+              className="px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
 
       {status === 'loading' && (
@@ -189,7 +339,7 @@ const Cal = () => {
         </div>
       )}
 
-      {status === 'success' && calendarData.length > 0 && (
+      {status === 'success' && viewMode === 'summary' && calendarData.length > 0 && (
         <div style={{ display: 'flex', gap: '20px', height: '70vh' }}>
           <div className="w-1/2 bg-white p-4 rounded-lg shadow-lg">
             <Bar data={barData} options={barOptions} />
@@ -197,6 +347,18 @@ const Cal = () => {
           <div className="w-1/2 bg-white p-4 rounded-lg shadow-lg">
             <Doughnut data={pieData} options={pieOptions} />
           </div>
+        </div>
+      )}
+
+      {status === 'success' && viewMode === 'trend' && trendData && (
+        <div className="bg-white p-4 rounded-lg shadow-lg" style={{ height: '70vh' }}>
+          <Line data={trendData} options={trendOptions} />
+        </div>
+      )}
+
+      {status === 'success' && viewMode === 'trend' && !trendData && (
+        <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700">
+          No data available for this month.
         </div>
       )}
     </div>
