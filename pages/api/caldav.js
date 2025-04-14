@@ -5,6 +5,30 @@ import ical from 'node-ical';
 
 const CALDAV_BASE = 'https://caldav.icloud.com';
 
+// Updated calendar category mapping
+const calendarCategories = {
+  "Deep Learning": "Deep Learning",
+  "Cassandra": "Cassandra",
+  "Valyria": "Valyria",
+  "Meetings & Events": "Meetings",
+  "Friends & Fam": "Social",
+  "Wellness": "Wellness",
+  "Personal & Content": "Routine",
+  "Eating": "Routine",
+  "Chores": "Routine"
+};
+
+// Updated category colors
+const categoryColors = {
+  "Deep Learning": "#F59E0B", // yellow/orange (same as original iCloud color)
+  "Cassandra": "#8B5CF6", // brown (similar to your iCloud color)
+  "Valyria": "#A855F7", // purple (matching your iCloud color)
+  "Meetings": "#3B82F6", // blue (matching your iCloud Meetings color)
+  "Social": "#10B981", // green (matching your iCloud Friends & Fam color)
+  "Wellness": "#4F46E5", // blue (matching your iCloud Wellness color)
+  "Routine": "#F97316" // orange (matching your iCloud grouped calendars color)
+};
+
 async function makeCalDAVRequest(url, method, headers, body) {
   const response = await fetch(url, { method, headers, body });
   const responseText = await response.text();
@@ -110,6 +134,7 @@ export default async function handler(req, res) {
 
   try {
     // 1) Get the list of calendars
+    // Modify the PROPFIND request to include calendar color
     const calendarsXml = await makeCalDAVRequest(
       `${CALDAV_BASE}/8310088992/calendars/`,
       'PROPFIND',
@@ -120,13 +145,14 @@ export default async function handler(req, res) {
         'User-Agent': 'Mozilla/5.0 (iCalFetcher/1.0)'
       },
       `<?xml version="1.0" encoding="utf-8"?>
-       <d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
-         <d:prop>
-           <d:resourcetype />
-           <d:displayname />
-           <c:supported-calendar-component-set />
-         </d:prop>
-       </d:propfind>`
+      <d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:apple="http://apple.com/ns/ical/">
+        <d:prop>
+          <d:resourcetype />
+          <d:displayname />
+          <c:supported-calendar-component-set />
+          <apple:calendar-color />
+        </d:prop>
+      </d:propfind>`
     );
 
     const parser = new DOMParser();
@@ -137,27 +163,55 @@ export default async function handler(req, res) {
     for (let i = 0; i < responses.length; i++) {
       const href = responses[i].getElementsByTagName('href')[0]?.textContent;
       const displayName = responses[i].getElementsByTagName('displayname')[0]?.textContent;
+      const colorElement = responses[i].getElementsByTagNameNS('http://apple.com/ns/ical/', 'calendar-color')[0];
+      const calendarColor = colorElement?.textContent || '#4F46E5'; // Default color if none found
+      
       // Skip if it's not a valid calendar or if it's Reminders
-        if (!href || !displayName || 
-            href === '/8310088992/calendars/' || 
-            displayName.includes('Reminders') ||
-            href.includes('notification') || 
-            href.includes('inbox') || 
-            href.includes('outbox')) {
-                continue;
-        }
-
-        calendarPromises.push(
-            getCalendarEvents(href, authHeader, startUTC, endUTC).then((eventsXml) => ({
-                id: href,
-                name: displayName,
-                hours: calculateEventHours(eventsXml)
-            }))
-        );
+      if (!href || !displayName || 
+          href === '/8310088992/calendars/' || 
+          displayName.includes('Reminders') ||
+          href.includes('notification') || 
+          href.includes('inbox') || 
+          href.includes('outbox')) {
+              continue;
+      }
+    
+      calendarPromises.push(
+          getCalendarEvents(href, authHeader, startUTC, endUTC).then((eventsXml) => ({
+              id: href,
+              name: displayName,
+              color: calendarColor,
+              hours: calculateEventHours(eventsXml)
+          }))
+      );
     }
 
+    // After fetching all calendar data, group by category
     const calendars = await Promise.all(calendarPromises);
-    return res.status(200).json(calendars);
+
+    // Group by category
+    const categoryData = {};
+    calendars.forEach(cal => {
+      console.log(cal.name)
+      const category = calendarCategories[cal.name] || "Other";
+      if (!categoryData[category]) {
+        categoryData[category] = {
+          name: category,
+          color: categoryColors[category] || "#6B7280", // Default gray
+          hours: 0,
+          calendars: []
+        };
+      }
+      categoryData[category].hours += cal.hours;
+      categoryData[category].calendars.push({
+        name: cal.name,
+        hours: cal.hours
+      });
+    });
+
+    // Convert to array
+    const result = Object.values(categoryData);
+    return res.status(200).json(result);
   } catch (error) {
     console.error('Request failed:', error);
     return res.status(500).json({ error: error.message });

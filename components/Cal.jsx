@@ -54,7 +54,7 @@ const Cal = () => {
       {
         label: 'Hours per Category',
         data: calendarData.map((item) => item.hours),
-        backgroundColor: '#4F46E5',
+        backgroundColor: calendarData.map((item) => item.color),
       },
     ],
   };
@@ -64,16 +64,7 @@ const Cal = () => {
     datasets: [
       {
         data: calendarData.map((item) => item.hours),
-        backgroundColor: [
-          '#4F46E5', // indigo
-          '#EF4444', // red
-          '#10B981', // green
-          '#F59E0B', // yellow
-          '#6366F1', // blue
-          '#EC4899', // pink
-          '#8B5CF6', // purple
-          '#14B8A6', // teal
-        ],
+        backgroundColor: calendarData.map((item) => item.color),
       },
     ],
   };
