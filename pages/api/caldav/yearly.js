@@ -86,6 +86,21 @@ async function getCalendarEvents(calendarUrl, authHeader, startUTC, endUTC) {
   return eventsXml;
 }
 
+// Extract hashtags from a title
+function extractHashtags(title) {
+  if (!title || typeof title !== 'string') {
+    return [];
+  }
+  
+  // Split on spaces and filter for hashtags
+  const words = title.split(' ');
+  const hashtags = words.filter(word => word.startsWith('#'))
+                        .map(tag => tag.substring(1).toLowerCase())
+                        .filter(tag => tag.length > 0);
+  
+  return hashtags;
+}
+
 function processCalendarEvents(eventsXml, calendarName) {
   if (!eventsXml) return [];
 
@@ -98,8 +113,8 @@ function processCalendarEvents(eventsXml, calendarName) {
   for (let i = 0; i < calendarDatas.length; i++) {
     const icalData = calendarDatas[i].textContent || '';
     try {
-      // Use parseICS method instead of sync.parseICS to avoid the fs dependency
-      const parsed = ical.parseICS(icalData);
+      // Use parseICS method
+      const parsed = ical.sync.parseICS(icalData);
       for (const key in parsed) {
         if (!Object.prototype.hasOwnProperty.call(parsed, key)) continue;
         const item = parsed[key];
@@ -113,6 +128,7 @@ function processCalendarEvents(eventsXml, calendarName) {
             
             events.push({
               title: item.summary,
+              description: item.description,
               start: startTime,
               end: endTime,
               calendarName: calendarName,
@@ -212,6 +228,17 @@ export default async function handler(req, res) {
     const allCalendarEvents = await Promise.all(calendarPromises);
     const allEvents = allCalendarEvents.flat();
 
+    // Extract hashtags from event titles for project tracking
+    const projectTags = new Set();
+    
+    allEvents.forEach(event => {
+      if (event.title && typeof event.title === 'string') {
+        // Extract hashtags using our safer function
+        const tags = extractHashtags(event.title);
+        tags.forEach(tag => projectTags.add(tag));
+      }
+    });
+
     // Initialize weeks data structure (53 weeks)
     const weeks = Array.from({ length: 53 }, (_, i) => ({
       weekNumber: i + 1,
@@ -259,7 +286,8 @@ export default async function handler(req, res) {
       weeks: weeks,
       totalEvents: allEvents.length,
       totalHours: Math.round(weeks.reduce((sum, week) => sum + week.totalHours, 0) * 10) / 10,
-      categories: categoryColors
+      categories: categoryColors,
+      projectTags: Array.from(projectTags)
     });
     
   } catch (error) {

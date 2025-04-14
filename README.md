@@ -5,7 +5,7 @@ Tracking My Time
 - [ ] Track Sleep in a better way
 - [ ] weekly email summary
 - [ ] LLM analyzing my time allocation
-- [ ] track the 20h rule 
+
 - [ ] "4000 weeks" view
 
 
@@ -36,3 +36,8 @@ Tracking My Time
     - "Picture a dashboard on the homepage (next to the weekly chart) with cards for each deep work project, like “Cassandra Model Training: 12/20 hours” or “Valyria Design: 18/20 hours."
     - Grok is suggesting using a tagging system within the event itself like "Tiger Beetle #banking-core"
         - this would also support logging across multiple projects
+
+- [ ] track the 20h rule 
+    - ok I'm accepting Grok's suggestion
+    - implementing this through `ProjectTracker.jsx`
+    - it's not displaying correctly
