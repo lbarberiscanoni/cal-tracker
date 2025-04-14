@@ -1,4 +1,3 @@
-// components/ProjectTracker.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 
 const CACHE_KEY = 'cal-tracker-project-data';
@@ -8,86 +7,63 @@ const ProjectTracker = () => {
   const [status, setStatus] = useState('idle');
   const [projectData, setProjectData] = useState([]);
   const [error, setError] = useState(null);
-  
-  // Extract hashtags from a title
+
   const extractHashtags = (title) => {
-    if (!title || typeof title !== 'string') {
-      return [];
-    }
-    
-    // Split on spaces and filter for hashtags
-    const words = title.split(' ');
-    const hashtags = words.filter(word => word.startsWith('#'))
-                          .map(tag => tag.substring(1).toLowerCase())
-                          .filter(tag => tag.length > 0);
-    
-    return hashtags;
+    if (!title || typeof title !== 'string') return [];
+    return title
+      .split(' ')
+      .filter((word) => word.startsWith('#'))
+      .map((tag) => tag.substring(1).toLowerCase())
+      .filter((tag) => tag.length > 0);
   };
-  
-  // Extract project information from events
+
+  const formatProjectName = (tag) => {
+    return tag
+      .split('-')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
   const extractProjectsFromEvents = (events) => {
     const projects = {};
-    
     if (!Array.isArray(events)) {
-      console.error("Events data is not an array:", events);
+      console.error('Events data is not an array:', events);
       return [];
     }
-    
-    events.forEach(event => {
-      // Skip if event doesn't have the required properties
-      if (!event || !event.title || !event.durationHours) {
-        return;
-      }
-      
-      // Extract hashtags from the title
+    events.forEach((event) => {
+      if (!event || !event.title || !event.durationHours) return;
+
       const tags = extractHashtags(event.title);
-      
-      // Process each tag as a project
-      tags.forEach(tag => {
-        // Remove any non-alphanumeric characters after the tag
+      tags.forEach((tag) => {
         const cleanTag = tag.replace(/[^a-z0-9-_]/g, '');
-        
         if (!projects[cleanTag]) {
           projects[cleanTag] = {
             id: cleanTag,
             name: formatProjectName(cleanTag),
             hours: 0,
-            lastUpdated: null
+            lastUpdated: null,
           };
         }
-        
-        // Add hours to the project
         projects[cleanTag].hours += event.durationHours;
-        
-        // Update lastUpdated if this event is more recent
         const eventDate = new Date(event.end);
-        if (!projects[cleanTag].lastUpdated || 
-            eventDate > new Date(projects[cleanTag].lastUpdated)) {
+        if (
+          !projects[cleanTag].lastUpdated ||
+          eventDate > new Date(projects[cleanTag].lastUpdated)
+        ) {
           projects[cleanTag].lastUpdated = eventDate;
         }
       });
     });
-    
     return Object.values(projects);
   };
-  
-  // Format project names to be more readable
-  const formatProjectName = (tag) => {
-    return tag
-      .split('-')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
-  
+
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Check if we have cached data
         const cachedData = localStorage.getItem(CACHE_KEY);
         if (cachedData) {
           try {
             const { data, timestamp } = JSON.parse(cachedData);
-            // Check if the cache is still valid (not expired)
             if (Date.now() - timestamp < CACHE_EXPIRY) {
               console.log('Using cached project data');
               setProjectData(data);
@@ -98,46 +74,38 @@ const ProjectTracker = () => {
             console.warn('Failed to parse cached project data', err);
           }
         }
-        
+
         setStatus('loading');
-        
-        // Fetch from the yearly data endpoint to get detailed events
+
         const currentYear = new Date().getFullYear();
         const response = await fetch(`/api/caldav/yearly?year=${currentYear}`);
-        
         if (!response.ok) {
           const errorText = await response.text();
           throw new Error(`Failed to fetch calendar data: ${response.status} - ${errorText}`);
         }
-        
         const data = await response.json();
-        
-        // Extract all events from all weeks
+
         let allEvents = [];
         if (data.weeks && Array.isArray(data.weeks)) {
-          data.weeks.forEach(week => {
+          data.weeks.forEach((week) => {
             if (week && week.events && Array.isArray(week.events)) {
               allEvents = [...allEvents, ...week.events];
             }
           });
         }
-        
-        console.log(`Found ${allEvents.length} calendar events`);
-        
-        // Extract projects from events
+        console.log(`Found ${allEvents.length} calendar events for year ${currentYear}`);
+
         const projects = extractProjectsFromEvents(allEvents);
-        
-        // Sort by hours (descending)
         projects.sort((a, b) => b.hours - a.hours);
-        
-        console.log(`Extracted ${projects.length} projects with hashtags`);
-        
-        // Cache the project data
-        localStorage.setItem(CACHE_KEY, JSON.stringify({
-          data: projects,
-          timestamp: Date.now()
-        }));
-        
+
+        localStorage.setItem(
+          CACHE_KEY,
+          JSON.stringify({
+            data: projects,
+            timestamp: Date.now(),
+          })
+        );
+
         setProjectData(projects);
         setStatus('success');
       } catch (err) {
@@ -149,101 +117,78 @@ const ProjectTracker = () => {
 
     fetchData();
   }, []);
-  
-  // Calculate progress and format data for display
+
   const formattedProjects = useMemo(() => {
-    return projectData.map(project => {
+    return projectData.map((project) => {
       const progress = Math.min(Math.round((project.hours / 20) * 100), 100);
       const isComplete = project.hours >= 20;
-      
-      // Format time string (e.g., "4.0 pm")
-      const lastUpdated = project.lastUpdated ? new Date(project.lastUpdated) : null;
-      const timeString = lastUpdated 
-        ? `${lastUpdated.getHours() % 12 || 12}.${Math.floor(lastUpdated.getMinutes() / 10) || 0} ${lastUpdated.getHours() >= 12 ? 'pm' : 'am'}`
-        : '';
-      
       return {
         ...project,
         progress,
         isComplete,
-        timeString
       };
     });
   }, [projectData]);
 
   return (
-    <div className="mt-6">
-      <h2 className="text-2xl font-bold mb-6">20-Hour Rule Projects</h2>
-      
+    <div className="p-4 bg-white rounded-lg shadow-lg w-full">
+      <h2 className="text-2xl font-bold mb-2">20-Hour Rule Projects</h2>
+      <p className="text-gray-500 text-sm mb-4">Tracking hours for {new Date().getFullYear()}</p>
+
       {status === 'loading' && (
         <div className="flex justify-center items-center h-24">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
         </div>
       )}
-      
+
       {error && (
         <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm mb-4">
           {error}
         </div>
       )}
-      
+
       {formattedProjects.length === 0 && status === 'success' && (
-        <div className="py-6 text-center text-gray-500">
-          <p>No tagged projects found. Add hashtags to your calendar events like "Project Meeting #project-name" to track progress.</p>
-        </div>
+        <p className="py-4 text-center text-gray-500">
+          No tagged projects found. Use <code>#project</code> in event titles.
+        </p>
       )}
-      
+
       {formattedProjects.length > 0 && (
-        <div>
-          {formattedProjects.map(project => (
-            <div key={project.id} className="mb-12">
-              {/* Title with hours */}
-              <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
-                <h3 className="text-xl font-bold">{project.name}</h3>
-                <div style={{ 
-                  marginLeft: '12px', 
-                  fontSize: '15px', 
-                  color: '#4b5563',
-                  fontWeight: '500' 
-                }}>
-                  {project.hours.toFixed(1)}/20 hours
-                </div>
+        <div className="max-h-[350px] overflow-y-auto pr-1">
+          {formattedProjects.map((project) => (
+            <div key={project.id} className="mb-6">
+              <div className="flex items-baseline mb-2">
+                <h3 className="text-xl font-bold">{project.name} ({project.hours.toFixed(1)} Hours)</h3>
               </div>
-              
-              {/* Progress bar with percentage label */}
-              <div style={{ 
-                position: 'relative',
-                width: '100%', 
-                height: '24px', 
-                backgroundColor: '#e5e7eb', 
-                borderRadius: '4px',
-                overflow: 'hidden',
-                marginBottom: '24px'
-              }}>
-                {/* The actual progress bar */}
-                <div style={{ 
-                  width: `${project.progress}%`, 
-                  height: '100%', 
-                  backgroundColor: project.isComplete ? '#059669' : '#3b82f6',
-                  borderRadius: project.progress < 100 ? '4px 0 0 4px' : '4px',
-                  transition: 'width 0.5s ease'
-                }} />
-                
-                {/* Percentage text */}
-                <div style={{
-                  position: 'absolute',
-                  top: '0',
-                  left: '0',
-                  width: '100%',
-                  height: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  paddingLeft: '10px',
-                  paddingRight: '10px',
-                  color: project.progress > 40 ? 'white' : '#1f2937',
-                  fontWeight: '500',
-                  fontSize: '14px'
-                }}>
+
+              <div style={{ position: 'relative', width: '100%', height: '24px', backgroundColor: '#e5e7eb', borderRadius: '4px', overflow: 'hidden', marginBottom: '8px' }}>
+                <div
+                  style={{
+                    width: `${project.progress}%`,
+                    height: '100%',
+                    backgroundColor: project.isComplete ? '#059669' : '#3b82f6',
+                    borderRadius: project.progress < 100 ? '4px 0 0 4px' : '4px',
+                    transition: 'width 0.5s ease, opacity 0.3s ease',
+                    opacity: 1,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.9')}
+                  onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: project.progress > 50 ? 'white' : 'black',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                  }}
+                >
                   {project.progress}%
                 </div>
               </div>

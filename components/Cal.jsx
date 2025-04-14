@@ -10,23 +10,16 @@ import {
 } from 'chart.js';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 
-ChartJS.register(
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement,
-  ChartDataLabels
-);
+ChartJS.register(Title, Tooltip, Legend, ArcElement, ChartDataLabels);
 
-// Cache keys
 const CACHE_KEY = 'cal-tracker-weekly-data';
-const CACHE_EXPIRY = 15 * 60 * 1000; // 15 minutes in milliseconds
+const CACHE_EXPIRY = 15 * 60 * 1000; // 15 minutes
 
 const Cal = () => {
   const [status, setStatus] = useState('idle');
   const [calendarData, setCalendarData] = useState([]);
   const [error, setError] = useState(null);
-  
+
   useEffect(() => {
     const fetchData = async () => {
       // Check if we have cached data
@@ -34,36 +27,27 @@ const Cal = () => {
       if (cachedData) {
         try {
           const { data, timestamp } = JSON.parse(cachedData);
-          // Check if the cache is still valid (not expired)
           if (Date.now() - timestamp < CACHE_EXPIRY) {
-            console.log('Using cached weekly data');
             setCalendarData(data);
             setStatus('success');
             return;
           }
-        } catch (err) {
-          console.warn('Failed to parse cached data', err);
-          // Continue to fetch if parsing fails
+        } catch {
+          // ignore parse error
         }
       }
-      
-      // Fetch fresh data if no cache or cache expired
       setStatus('loading');
       try {
-        // Default to week range
-        const response = await fetch(`/api/caldav?range=week`);
-        const data = await response.json();
+        const response = await fetch('/api/caldav?range=week');
+        const jsonData = await response.json();
         if (!response.ok) {
-          throw new Error(data.error || 'Failed to fetch calendar data');
+          throw new Error(jsonData.error || 'Failed to fetch calendar data');
         }
-        
-        // Cache the fresh data
         localStorage.setItem(CACHE_KEY, JSON.stringify({
-          data,
+          data: jsonData,
           timestamp: Date.now()
         }));
-        
-        setCalendarData(data);
+        setCalendarData(jsonData);
         setStatus('success');
       } catch (err) {
         setError(err.message);
@@ -74,38 +58,34 @@ const Cal = () => {
     fetchData();
   }, []);
 
-  // Sort and prepare the pie chart data (memoized to prevent unnecessary recalculations)
   const { pieData, pieOptions } = useMemo(() => {
-    // Sort the data for pie chart
     const sortedData = [...calendarData].sort((a, b) => b.hours - a.hours);
     const totalHours = sortedData.reduce((sum, cal) => sum + cal.hours, 0);
 
     const data = {
-      labels: sortedData.map(item => {
-        const percentage = totalHours > 0 ? Math.round((item.hours / totalHours) * 100) : 0;
+      labels: sortedData.map((item) => {
+        const pct = totalHours > 0 ? Math.round((item.hours / totalHours) * 100) : 0;
         return `${item.name} (+${item.hours})`;
       }),
       datasets: [
         {
-          data: sortedData.map(item => item.hours),
-          backgroundColor: sortedData.map(item => item.color),
+          data: sortedData.map((item) => item.hours),
+          backgroundColor: sortedData.map((item) => item.color),
         },
       ],
     };
 
-    // Chart options
     const options = {
       responsive: true,
-      maintainAspectRatio: false,
+      maintainAspectRatio: false, 
       plugins: {
         legend: {
           position: 'right',
           labels: {
             boxWidth: 15,
             font: { size: 14 },
-            padding: 20
-          },
-          display: true // Ensure legend is displayed
+            padding: 10
+          }
         },
         title: {
           display: true,
@@ -114,16 +94,17 @@ const Cal = () => {
         },
         tooltip: {
           callbacks: {
-            label: function(context) {
-              const percentage = totalHours > 0 ? Math.round((context.raw / totalHours) * 100) : 0;
-              return `${context.raw} hours (${percentage}%)`;
+            label: (ctx) => {
+              const val = ctx.raw;
+              const pct = totalHours > 0 ? Math.round((val / totalHours) * 100) : 0;
+              return `${val} hours (${pct}%)`;
             }
           }
         },
         datalabels: {
-          formatter: (value, ctx) => {
-            const percentage = totalHours > 0 ? Math.round((value / totalHours) * 100) : 0;
-            return percentage >= 3 ? `${percentage}%` : ''; // Only show if slice is large enough
+          formatter: (value) => {
+            const pct = totalHours > 0 ? Math.round((value / totalHours) * 100) : 0;
+            return pct >= 3 ? `${pct}%` : '';
           },
           color: '#fff',
           font: {
@@ -140,26 +121,32 @@ const Cal = () => {
   }, [calendarData]);
 
   return (
-    <div className="w-full p-4">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Weekly Time Tracking</h1>
-      </div>
+    <div className="p-4">
+      <h1 className="text-2xl font-bold mb-6">Weekly Time Tracking</h1>
 
+      {/* Loading indicator */}
       {status === 'loading' && (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
         </div>
       )}
 
+      {/* Error */}
       {error && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
           {error}
         </div>
       )}
 
+      {/* Chart */}
       {status === 'success' && calendarData.length > 0 && (
-        <div className="flex flex-col items-center bg-white p-6 rounded-lg shadow-lg">
-          <div style={{ height: '60vh', width: '100%', maxWidth: '900px' }}>
+        <div className="bg-white p-4 rounded-lg shadow-lg w-full">
+          {/* 
+            A container that gives a fixed height 
+            maintainAspectRatio=false in pieOptions 
+            => chart stretches to fill 
+          */}
+          <div className="relative w-full" style={{ height: '500px' }}>
             <Doughnut data={pieData} options={pieOptions} />
           </div>
         </div>

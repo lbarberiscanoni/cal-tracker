@@ -7,6 +7,9 @@ export default {
   ],
   theme: {
     extend: {
+      screens: {
+        'xs': '500px', // Custom breakpoint for very small screens
+      },
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",

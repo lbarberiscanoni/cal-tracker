@@ -41,3 +41,7 @@ Tracking My Time
     - ok I'm accepting Grok's suggestion
     - implementing this through `ProjectTracker.jsx`
     - it's not displaying correctly
+
+- I had to switch to Grok because I ran into Claude limits lol
+
+- let's make sure we are tracking across all things as opposed to just the week
