@@ -197,42 +197,58 @@ const ProjectTracker = () => {
         <div>
           {formattedProjects.map(project => (
             <div key={project.id} className="mb-12">
-              <h3 className="text-xl font-bold">{project.name}</h3>
-              <div className="text-gray-600 mb-4">{project.timeString}</div>
+              {/* Title with hours */}
+              <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: '8px' }}>
+                <h3 className="text-xl font-bold">{project.name}</h3>
+                <div style={{ 
+                  marginLeft: '12px', 
+                  fontSize: '15px', 
+                  color: '#4b5563',
+                  fontWeight: '500' 
+                }}>
+                  {project.hours.toFixed(1)}/20 hours
+                </div>
+              </div>
               
-              {/* Simple stats */}
-              <div className="text-lg font-bold">{project.hours.toFixed(1)}</div>
-              <div className="text-sm text-gray-500 mb-1">Hours</div>
-              
-              <div className="text-lg font-bold">{project.progress}%</div>
-              <div className="text-sm text-gray-500 mb-1">Consistency</div>
-              
-              <div className="text-lg font-bold">{project.hours.toFixed(1)}/20</div>
-              <div className="text-sm text-gray-500 mb-4">Completion</div>
-              
-              {/* Simple visual bar - basic version that should work in all environments */}
-              <div className="w-full bg-gray-200 h-4 mb-6 rounded-sm">
-                <div 
-                  className="bg-blue-500 h-4 rounded-sm" 
-                  style={{ width: `${project.progress}%` }}
-                ></div>
+              {/* Progress bar with percentage label */}
+              <div style={{ 
+                position: 'relative',
+                width: '100%', 
+                height: '24px', 
+                backgroundColor: '#e5e7eb', 
+                borderRadius: '4px',
+                overflow: 'hidden',
+                marginBottom: '24px'
+              }}>
+                {/* The actual progress bar */}
+                <div style={{ 
+                  width: `${project.progress}%`, 
+                  height: '100%', 
+                  backgroundColor: project.isComplete ? '#059669' : '#3b82f6',
+                  borderRadius: project.progress < 100 ? '4px 0 0 4px' : '4px',
+                  transition: 'width 0.5s ease'
+                }} />
+                
+                {/* Percentage text */}
+                <div style={{
+                  position: 'absolute',
+                  top: '0',
+                  left: '0',
+                  width: '100%',
+                  height: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  paddingLeft: '10px',
+                  paddingRight: '10px',
+                  color: project.progress > 40 ? 'white' : '#1f2937',
+                  fontWeight: '500',
+                  fontSize: '14px'
+                }}>
+                  {project.progress}%
+                </div>
               </div>
             </div>
           ))}
-          
-          {/* Control buttons */}
-          <div className="flex gap-2 mt-8">
-            <button className="border border-gray-300 px-4 py-2 rounded">
-              ORDER
-            </button>
-            <button className="border border-gray-300 px-4 py-2 rounded">
-              COLLAPSE
-            </button>
-          </div>
-          
-          <div className="mt-6 text-sm text-gray-500">
-            <p>Add <code className="bg-gray-100 px-1 rounded">#project-name</code> hashtags to your calendar events to track progress toward the 20-hour rule.</p>
-          </div>
         </div>
       )}
     </div>
