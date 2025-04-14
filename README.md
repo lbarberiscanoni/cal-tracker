@@ -24,3 +24,9 @@ Tracking My Time
     - jk it's already hosted https://cal-tracker-ecru.vercel.app/
 
 - Now let's fill up the history
+    - ok this is a good starting point but there are a few things to cleanup
+        - Monthly Trends looks incorrect
+            - maybe drop the monthly view altogether
+    - I gotta cache maybe with useMemo
+
+- ok let's get back into this

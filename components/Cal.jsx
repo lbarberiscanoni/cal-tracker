@@ -1,11 +1,10 @@
 // components/Cal.jsx
 import React, { useState, useEffect } from 'react';
-import { Bar, Doughnut, Line } from 'react-chartjs-2';
+import { Doughnut, Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
-  BarElement,
   PointElement,
   LineElement,
   Title,
@@ -18,7 +17,6 @@ import ChartDataLabels from 'chartjs-plugin-datalabels';
 ChartJS.register(
   CategoryScale,
   LinearScale,
-  BarElement,
   PointElement,
   LineElement,
   Title,
@@ -93,26 +91,14 @@ const Cal = () => {
     return date.toLocaleString('default', { month: 'long', year: 'numeric' });
   };
 
-  // Prepare summary chart data
-  const barData = {
-    labels: calendarData.map((item) => item.name),
-    datasets: [
-      {
-        label: 'Hours per Category',
-        data: calendarData.map((item) => item.hours),
-        backgroundColor: calendarData.map((item) => item.color),
-      },
-    ],
-  };
-
   // Sort the data for pie chart
   const sortedData = [...calendarData].sort((a, b) => b.hours - a.hours);
+  const totalHours = sortedData.reduce((sum, cal) => sum + cal.hours, 0);
 
   const pieData = {
     labels: sortedData.map(item => {
-      const total = sortedData.reduce((sum, cal) => sum + cal.hours, 0);
-      const percentage = total > 0 ? Math.round((item.hours / total) * 100) : 0;
-      return `${item.name} (${percentage}%)`;
+      const percentage = totalHours > 0 ? Math.round((item.hours / totalHours) * 100) : 0;
+      return `${item.name} (+${item.hours})`;
     }),
     datasets: [
       {
@@ -153,62 +139,37 @@ const Cal = () => {
       legend: {
         position: 'right',
         labels: {
-          boxWidth: 10,
-          font: { size: 10 }
-        }
+          boxWidth: 15,
+          font: { size: 14 },
+          padding: 20
+        },
+        display: true // Ensure legend is displayed
       },
       title: {
         display: true,
         text: 'Time Distribution',
-        font: { size: 14 }
+        font: { size: 20, weight: 'bold' }
       },
       tooltip: {
         callbacks: {
           label: function(context) {
-            return `${context.raw} hours`;
+            const percentage = totalHours > 0 ? Math.round((context.raw / totalHours) * 100) : 0;
+            return `${context.raw} hours (${percentage}%)`;
           }
         }
       },
       datalabels: {
         formatter: (value, ctx) => {
-          const total = ctx.chart.data.datasets[0].data.reduce((sum, val) => sum + val, 0);
-          const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
-          return percentage > 5 ? `${percentage}%` : ''; // Only show if slice is large enough
+          const percentage = totalHours > 0 ? Math.round((value / totalHours) * 100) : 0;
+          return percentage >= 3 ? `${percentage}%` : ''; // Only show if slice is large enough
         },
         color: '#fff',
         font: {
           weight: 'bold',
-          size: 12
-        }
-      }
-    },
-  };
-
-  const barOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      datalabels: {
-        display: false // Disable datalabels for bar chart
-      },
-      legend: { display: false },
-      title: {
-        display: true,
-        text: 'Hours per Category',
-        font: { size: 14 }
-      },
-    },
-    scales: {
-      x: {
-        ticks: { 
-          autoSkip: false, 
-          maxRotation: 45, 
-          minRotation: 45,
-          font: { size: 10 }
+          size: 14
         },
-      },
-      y: {
-        beginAtZero: true,
+        anchor: 'center',
+        align: 'center'
       }
     },
   };
@@ -340,11 +301,8 @@ const Cal = () => {
       )}
 
       {status === 'success' && viewMode === 'summary' && calendarData.length > 0 && (
-        <div style={{ display: 'flex', gap: '20px', height: '70vh' }}>
-          <div className="w-1/2 bg-white p-4 rounded-lg shadow-lg">
-            <Bar data={barData} options={barOptions} />
-          </div>
-          <div className="w-1/2 bg-white p-4 rounded-lg shadow-lg">
+        <div className="flex flex-col items-center bg-white p-6 rounded-lg shadow-lg">
+          <div style={{ height: '60vh', width: '100%', maxWidth: '900px' }}>
             <Doughnut data={pieData} options={pieOptions} />
           </div>
         </div>
