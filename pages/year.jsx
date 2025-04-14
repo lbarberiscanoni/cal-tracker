@@ -1,5 +1,5 @@
 // pages/year.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -33,6 +33,10 @@ const categoryColors = {
   "Routine": "#F97316"
 };
 
+// Cache settings
+const CACHE_KEY_PREFIX = 'cal-tracker-yearly-data-';
+const CACHE_EXPIRY = 60 * 60 * 1000; // 1 hour in milliseconds
+
 const YearView = () => {
   const [status, setStatus] = useState('idle');
   const [yearlyData, setYearlyData] = useState(null);
@@ -51,7 +55,53 @@ const YearView = () => {
 
   useEffect(() => {
     const fetchYearlyData = async () => {
+      const cacheKey = `${CACHE_KEY_PREFIX}${currentYear}`;
+      
+      // Check if we have cached data for this year
+      const cachedData = localStorage.getItem(cacheKey);
+      
+      // For current year, only use cache if it's from today (data changes daily)
+      const shouldUseCache = () => {
+        if (!cachedData) return false;
+        
+        try {
+          const { timestamp } = JSON.parse(cachedData);
+          
+          // If it's the current year, only use cache if it's from today
+          if (currentYear === new Date().getFullYear()) {
+            const today = new Date();
+            const cachedDate = new Date(timestamp);
+            return today.toDateString() === cachedDate.toDateString();
+          }
+          
+          // For past years, use cache if not expired
+          return Date.now() - timestamp < CACHE_EXPIRY;
+        } catch (err) {
+          console.warn('Failed to parse cached data', err);
+          return false;
+        }
+      };
+      
+      if (shouldUseCache()) {
+        try {
+          const { data } = JSON.parse(cachedData);
+          console.log(`Using cached data for year ${currentYear}`);
+          setYearlyData(data);
+          
+          // Set maxWeek based on current year
+          updateMaxWeek(currentYear);
+          
+          setStatus('success');
+          return;
+        } catch (err) {
+          console.warn('Error processing cached data', err);
+          // Continue to fetch if there was an error
+        }
+      }
+      
+      // Fetch fresh data
       setStatus('loading');
+      
       try {
         const response = await fetch(`/api/caldav/yearly?year=${currentYear}`);
         const data = await response.json();
@@ -60,22 +110,25 @@ const YearView = () => {
           throw new Error(data.error || 'Failed to fetch yearly data');
         }
         
-        // Adjust max week based on current year
-        if (currentYear === new Date().getFullYear()) {
-          setMaxWeek(getCurrentWeekNumber());
-        } else if (currentYear < new Date().getFullYear()) {
-          setMaxWeek(53); // Show full year for past years
-        } else {
-          setMaxWeek(0); // Future years should show no data
-        }
+        // Cache the fresh data
+        localStorage.setItem(cacheKey, JSON.stringify({
+          data,
+          timestamp: Date.now()
+        }));
         
         setYearlyData(data);
+        
+        // Update maxWeek based on current year
+        updateMaxWeek(currentYear);
+        
         setStatus('success');
       } catch (err) {
+        console.error('Error fetching data:', err);
+        
         // Generate mock data if API not yet implemented
         const categories = Object.keys(categoryColors);
         
-        // Determine how many weeks to generate based on current year
+        // Determine how many weeks to generate
         let weeksToGenerate = 52;
         if (currentYear === new Date().getFullYear()) {
           weeksToGenerate = getCurrentWeekNumber();
@@ -116,7 +169,14 @@ const YearView = () => {
           categories: categoryColors
         };
         
+        // Cache the mock data
+        localStorage.setItem(cacheKey, JSON.stringify({
+          data: mockData,
+          timestamp: Date.now()
+        }));
+        
         setYearlyData(mockData);
+        updateMaxWeek(currentYear);
         setStatus('success');
       }
     };
@@ -124,8 +184,19 @@ const YearView = () => {
     fetchYearlyData();
   }, [currentYear]);
 
-  // Prepare yearly chart data with separate lines for each category
-  const prepareYearlyData = () => {
+  // Update max week based on current year
+  const updateMaxWeek = (year) => {
+    if (year === new Date().getFullYear()) {
+      setMaxWeek(getCurrentWeekNumber());
+    } else if (year < new Date().getFullYear()) {
+      setMaxWeek(53); // Show full year for past years
+    } else {
+      setMaxWeek(0); // Future years should show no data
+    }
+  };
+
+  // Prepare yearly chart data with separate lines for each category (memoized)
+  const yearlyChartData = useMemo(() => {
     if (!yearlyData || !yearlyData.weeks) {
       return null;
     }
@@ -181,12 +252,10 @@ const YearView = () => {
     });
     
     return { labels, datasets };
-  };
-
-  const yearlyChartData = prepareYearlyData();
+  }, [yearlyData, maxWeek, currentYear]);
 
   // Calculate dynamic min and max for the x-axis
-  const getAxisRange = () => {
+  const axisRange = useMemo(() => {
     if (currentYear < new Date().getFullYear()) {
       // Past years: show weeks 1-52
       return { min: 1, max: 52 };
@@ -197,11 +266,10 @@ const YearView = () => {
       // Current year: show weeks 1 to current week
       return { min: 1, max: maxWeek };
     }
-  };
+  }, [currentYear, maxWeek]);
 
-  const axisRange = getAxisRange();
-
-  const yearlyOptions = {
+  // Chart options (memoized)
+  const yearlyOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     interaction: {
@@ -262,7 +330,7 @@ const YearView = () => {
         grace: '5%' // Add some padding
       }
     }
-  };
+  }), [currentYear, axisRange]);
 
   return (
     <main className="w-full min-h-screen bg-background p-4">
@@ -288,12 +356,6 @@ const YearView = () => {
             <Line data={yearlyChartData} options={yearlyOptions} />
           </div>
         )}
-
-        <div className="mt-6 text-center">
-          <a href="/" className="text-indigo-600 hover:text-indigo-800 font-medium">
-            Back to Summary View
-          </a>
-        </div>
       </div>
     </main>
   );
