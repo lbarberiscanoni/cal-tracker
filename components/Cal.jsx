@@ -59,14 +59,59 @@ const Cal = () => {
     ],
   };
 
+  // First, let's sort the calendar data by hours (highest first) before passing it to the chart
+  const sortedData = [...calendarData].sort((a, b) => b.hours - a.hours);
+
   const pieData = {
-    labels: calendarData.map((item) => item.name),
+    labels: sortedData.map(item => {
+      const total = sortedData.reduce((sum, cal) => sum + cal.hours, 0);
+      const percentage = total > 0 ? Math.round((item.hours / total) * 100) : 0;
+      return `${item.name} (${percentage}%)`;
+    }),
     datasets: [
       {
-        data: calendarData.map((item) => item.hours),
-        backgroundColor: calendarData.map((item) => item.color),
+        data: sortedData.map(item => item.hours),
+        backgroundColor: sortedData.map(item => item.color),
       },
     ],
+  };
+
+  const pieOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'right',
+        labels: {
+          boxWidth: 10,
+          font: { size: 10 }
+        }
+      },
+      title: {
+        display: true,
+        text: 'Time Distribution',
+        font: { size: 14 }
+      },
+      tooltip: {
+        callbacks: {
+          label: function(context) {
+            return `${context.raw} hours`;
+          }
+        }
+      },
+      datalabels: {
+        formatter: (value, ctx) => {
+          const total = ctx.chart.data.datasets[0].data.reduce((sum, val) => sum + val, 0);
+          const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+          return percentage > 5 ? `${percentage}%` : ''; // Only show if slice is large enough
+        },
+        color: '#fff',
+        font: {
+          weight: 'bold',
+          size: 12
+        }
+      }
+    },
   };
 
   const barOptions = {
@@ -92,25 +137,6 @@ const Cal = () => {
       y: {
         beginAtZero: true,
       }
-    },
-  };
-
-  const pieOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'right',
-        labels: {
-          boxWidth: 10,
-          font: { size: 10 }
-        }
-      },
-      title: {
-        display: true,
-        text: 'Time Distribution',
-        font: { size: 14 }
-      },
     },
   };
 

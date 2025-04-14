@@ -1,7 +1,6 @@
 Tracking My Time
 
 # Roadmap
-- [ ] Pie chart should show percentages
 - [ ] track the 20h rule 
 - [ ] weekly email summary
 - [ ] LLM analyzing my time allocation
@@ -18,3 +17,5 @@ Tracking My Time
     - ok moved it to the Roadmap section
 
 - [x] group calendars by color
+
+- [x] Pie chart should show percentages
