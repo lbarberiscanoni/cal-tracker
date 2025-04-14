@@ -30,3 +30,9 @@ Tracking My Time
     - I gotta cache maybe with useMemo
 
 - ok let's get back into this
+    
+- now let's brianstorm the 20h rule feature with Grok 
+    - "For the 20-hour rule, we could brainstorm a new view—a progress bar or a small gauge for each active project, showing hours accumulated toward 20." 
+    - "Picture a dashboard on the homepage (next to the weekly chart) with cards for each deep work project, like “Cassandra Model Training: 12/20 hours” or “Valyria Design: 18/20 hours."
+    - Grok is suggesting using a tagging system within the event itself like "Tiger Beetle #banking-core"
+        - this would also support logging across multiple projects
