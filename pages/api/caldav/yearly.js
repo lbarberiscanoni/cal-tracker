@@ -5,6 +5,30 @@ import ical from 'node-ical';
 
 const CALDAV_BASE = 'https://caldav.icloud.com';
 
+// Calendar category mappings
+const calendarCategories = {
+  "Deep Learning": "Deep Learning",
+  "Cassandra": "Cassandra",
+  "Valyria": "Valyria",
+  "Meetings & E": "Meetings",
+  "Friends & Fam": "Social",
+  "Wellness": "Wellness",
+  "Personal & Content": "Routine",
+  "Eating": "Routine",
+  "Chores": "Routine"
+};
+
+// Category colors
+const categoryColors = {
+  "Deep Learning": "#F59E0B",
+  "Cassandra": "#8B5CF6",
+  "Valyria": "#A855F7",
+  "Meetings": "#3B82F6",
+  "Social": "#10B981",
+  "Wellness": "#4F46E5",
+  "Routine": "#F97316"
+};
+
 // Get week number from date
 function getWeekNumber(date) {
   const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
@@ -74,7 +98,8 @@ function processCalendarEvents(eventsXml, calendarName) {
   for (let i = 0; i < calendarDatas.length; i++) {
     const icalData = calendarDatas[i].textContent || '';
     try {
-      const parsed = ical.sync.parseICS(icalData);
+      // Use parseICS method instead of sync.parseICS to avoid the fs dependency
+      const parsed = ical.parseICS(icalData);
       for (const key in parsed) {
         if (!Object.prototype.hasOwnProperty.call(parsed, key)) continue;
         const item = parsed[key];
@@ -187,10 +212,11 @@ export default async function handler(req, res) {
     const allCalendarEvents = await Promise.all(calendarPromises);
     const allEvents = allCalendarEvents.flat();
 
-    // Initialize weeks data structure (52 weeks)
+    // Initialize weeks data structure (53 weeks)
     const weeks = Array.from({ length: 53 }, (_, i) => ({
       weekNumber: i + 1,
       totalHours: 0,
+      categories: {},
       events: []
     }));
 
@@ -198,9 +224,21 @@ export default async function handler(req, res) {
     allEvents.forEach(event => {
       const weekNum = getWeekNumber(event.start);
       
+      // Get the category for this calendar
+      const category = calendarCategories[event.calendarName] || event.calendarName;
+      
       // Ensure weekNum is within bounds (sometimes week 53 can happen)
       if (weekNum > 0 && weekNum <= weeks.length) {
+        // Add to total hours
         weeks[weekNum - 1].totalHours += event.durationHours;
+        
+        // Add to category hours
+        if (!weeks[weekNum - 1].categories[category]) {
+          weeks[weekNum - 1].categories[category] = 0;
+        }
+        weeks[weekNum - 1].categories[category] += event.durationHours;
+        
+        // Store event
         weeks[weekNum - 1].events.push(event);
       }
     });
@@ -208,6 +246,11 @@ export default async function handler(req, res) {
     // Round all hours to one decimal place
     weeks.forEach(week => {
       week.totalHours = Math.round(week.totalHours * 10) / 10;
+      
+      // Round category hours
+      Object.keys(week.categories).forEach(cat => {
+        week.categories[cat] = Math.round(week.categories[cat] * 10) / 10;
+      });
     });
 
     // Return the structured yearly data
@@ -215,7 +258,8 @@ export default async function handler(req, res) {
       year: yearInt,
       weeks: weeks,
       totalEvents: allEvents.length,
-      totalHours: Math.round(weeks.reduce((sum, week) => sum + week.totalHours, 0) * 10) / 10
+      totalHours: Math.round(weeks.reduce((sum, week) => sum + week.totalHours, 0) * 10) / 10,
+      categories: categoryColors
     });
     
   } catch (error) {
